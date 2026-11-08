@@ -1,5 +1,7 @@
 # React Native Dev Inspector
 
+> 🇨🇳 中文文档(本 fork 实测版本矩阵 + 接入指南 + 发布步骤): [packages/react-native-dev-inspector/README.md](./packages/react-native-dev-inspector/README.md)
+
 Click on React Native components to jump directly to the source code in your IDE.
 
 **[Documentation](https://vahesaroyan.github.io/react-native-dev-inspector/)** | [GitHub](https://github.com/VaheSaroyan/react-native-dev-inspector)
@@ -13,11 +15,11 @@ Inspired by [react-dev-inspector](https://github.com/zthxxx/react-dev-inspector)
 - **Component Hierarchy** - Navigate the full component tree with breadcrumb UI
 - **Box Model Visualization** - See margin, padding, and dimensions like browser DevTools
 - **Style Inspector** - View computed styles of selected components
+- **NativeWind Compatible** - Works seamlessly with Tailwind CSS for React Native
 - **Dev Menu Integration** - Toggle inspector from React Native dev menu (shake or Cmd+D/Cmd+M)
 - **Customizable** - Support for VS Code, Cursor, WebStorm, Sublime, and more
 - **Expo & CLI Support** - Works with both Expo and React Native CLI projects
 - **New Architecture Support** - Works with RN 0.68+, 0.73+, 0.82+ (Fabric)
-- **NativeWind Compatible** - Works seamlessly with Tailwind CSS for React Native
 - **Optional Babel Plugin** - Enhanced source tracking for more accurate "Open in Editor"
 
 ## Installation
@@ -63,6 +65,80 @@ export default function App() {
 
 **That's it!** The inspector works out of the box.
 
+## Version Compatibility (tested in this fork)
+
+The `rn-compat` layer (metro resolver adapter + inspector hierarchy shim + runtime polyfills) makes the inspector work across RN versions. Tested matrix:
+
+| RN version | Architecture | Status | Notes |
+|-----------|--------------|--------|-------|
+| 0.72 | Paper | ✅ Tested | Wrapper components (Button/Touchable) resolve to the business JSX line via `touchedViewTag` fiber lookup; `URLSearchParams` polyfilled for Open-in-editor |
+| 0.73 – 0.81 | Fabric | ✅ Tested (0.81.6, bridgeless) | Hierarchy fibers restored; `scriptURL` read from TurboModule `getConstants()` so Open works on any Metro port |
+| 0.82+ | Fabric | ✅ Tested (0.86) | New private inspector path intercepted; hierarchy rebuilt through the shim |
+
+### Integration per version
+
+**All versions** — 3 steps: Metro plugin, babel plugin, wrap the app. Always gate the runtime parts with `__DEV__` so release builds strip them entirely:
+
+```tsx
+// App.tsx
+import React from 'react';
+import {Inspector, InspectorDevMenu} from 'react-native-dev-inspector';
+
+export default function App() {
+  const app = <YourApp />;
+  if (!__DEV__) {
+    // Release build: no inspector code in the bundle at all
+    return app;
+  }
+  return (
+    <Inspector>
+      {app}
+      <InspectorDevMenu position="bottom-right" />
+    </Inspector>
+  );
+}
+```
+
+**RN ≤ 0.72 (Paper)** — additionally apply `withInspectorCompat` in Metro so the hierarchy shim and dependency fixes kick in:
+
+```js
+// metro.config.js
+const {getDefaultConfig} = require('@react-native/metro-config');
+const {withInspector} = require('react-native-dev-inspector/metro');
+const {withInspectorCompat} = require('react-native-dev-inspector/rn-compat');
+
+module.exports = withInspector(
+  withInspectorCompat(getDefaultConfig(__dirname)),
+  {editor: 'code'},
+);
+```
+
+**RN 0.73 – 0.81 (Fabric)** — same Metro setup as above (`withInspectorCompat` fixes the optional-dependency resolution and restores hierarchy fibers); Open-in-editor works on any Metro port out of the box:
+
+```js
+// metro.config.js — identical wrapper order, e.g. with Expo:
+const {getDefaultConfig} = require('expo/metro-config');
+const {withInspector} = require('react-native-dev-inspector/metro');
+const {withInspectorCompat} = require('react-native-dev-inspector/rn-compat');
+
+module.exports = withInspector(
+  withInspectorCompat(getDefaultConfig(__dirname)),
+  {editor: 'code'},
+);
+```
+
+**RN 0.82+ (Fabric, new private path)** — same as 0.73–0.81; the resolver intercepts the new private inspector path and rebuilds the hierarchy through the shim:
+
+```js
+// metro.config.js — no extra flags, same two wrappers:
+module.exports = withInspector(
+  withInspectorCompat(getDefaultConfig(__dirname)),
+  {editor: 'code'},
+);
+```
+
+The runtime polyfills (e.g. `URLSearchParams.set` on RN 0.72) are imported automatically by the umbrella package and are feature-detected — they are no-ops on newer RN and are stripped from release bundles together with the `__DEV__` gate.
+
 ## Enhanced Source Tracking (Optional Babel Plugin)
 
 For more accurate "Open in Editor" functionality, you can optionally add the babel plugin. This injects source location information directly into your JSX components, providing precise file and line tracking.
@@ -96,7 +172,7 @@ The inspector works seamlessly with NativeWind (Tailwind CSS for React Native). 
 // metro.config.js
 const { getDefaultConfig } = require('expo/metro-config');
 const { withNativeWind } = require('nativewind/metro');
-const { withInspector } = require('react-native-dev-inspector/metro');
+const { withInspector } = require('@azsxdc12356/react-native-dev-inspector/metro');
 
 const config = getDefaultConfig(__dirname);
 
@@ -107,7 +183,7 @@ module.exports = withInspector(nativeWindConfig);
 
 ```js
 // babel.config.js - with NativeWind
-const { inspectorBabelPlugin } = require('react-native-dev-inspector/metro');
+const { inspectorBabelPlugin } = require('@azsxdc12356/react-native-dev-inspector/metro');
 
 module.exports = function (api) {
   api.cache(true);
@@ -314,7 +390,7 @@ The inspector works without any build-time transformations:
 
 1. Make sure you're running in development mode (`__DEV__` is true)
 2. Clear the Metro bundler cache: `npx expo start --clear` or `npx react-native start --reset-cache`
-3. Some library components may not have source info availab[RELEASE_NOTES.md](../../Desktop/RELEASE_NOTES.md)le
+3. Some library components may not have source info available
 
 ### Inspector doesn't show up
 

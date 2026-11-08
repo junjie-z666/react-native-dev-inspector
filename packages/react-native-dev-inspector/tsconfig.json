@@ -3,7 +3,14 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "jsx": "react-native"
+    "jsx": "react-native",
+    "baseUrl": "../..",
+    "paths": {
+      "@rn-dev-inspector/core": ["packages/core/src/index.ts"],
+      "@rn-dev-inspector/metro-plugin": ["packages/metro-plugin/src/index.ts"],
+      "@rn-dev-inspector/rn-compat": ["packages/rn-compat/src/index.ts"],
+      "@rn-dev-inspector/rn-compat/dist/runtime": ["packages/rn-compat/src/runtime.ts"]
+    }
   },
   "include": ["src/**/*"]
 }

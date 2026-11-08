@@ -1,6 +1,6 @@
 {
-  "name": "react-native-dev-inspector",
-  "version": "1.2.0",
+  "name": "@azsxdc12356/react-native-dev-inspector",
+  "version": "1.2.2",
   "description": "Click on React Native components to jump to source code in your IDE",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,10 +22,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsup",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm build"
+    "prepublishOnly": "tsup"
   },
   "keywords": [
     "react-native",
@@ -39,21 +39,36 @@
   "author": "VaheSaroyan",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VaheSaroyan/react-native-dev-inspector.git",
+    "url": "git+https://github.com/junjie-z666/react-native-dev-inspector.git",
     "directory": "packages/react-native-dev-inspector"
   },
   "bugs": {
-    "url": "https://github.com/VaheSaroyan/react-native-dev-inspector/issues"
+    "url": "https://github.com/junjie-z666/react-native-dev-inspector/issues"
   },
-  "homepage": "https://github.com/VaheSaroyan/react-native-dev-inspector#readme",
+  "homepage": "https://github.com/junjie-z666/react-native-dev-inspector#readme",
   "peerDependencies": {
     "react": ">=17.0.0",
     "react-native": ">=0.68.0"
   },
+  "peerDependenciesMeta": {
+    "@babel/core": {
+      "optional": true
+    },
+    "metro": {
+      "optional": true
+    },
+    "metro-config": {
+      "optional": true
+    },
+    "expo-dev-client": {
+      "optional": true
+    },
+    "expo-dev-menu": {
+      "optional": true
+    }
+  },
   "dependencies": {
-    "@rn-dev-inspector/core": "workspace:*",
-    "@rn-dev-inspector/metro-plugin": "workspace:*",
-    "@rn-dev-inspector/rn-compat": "workspace:*"
+    "launch-editor": "2.12.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
