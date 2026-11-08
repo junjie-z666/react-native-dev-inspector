@@ -109,6 +109,9 @@ importers:
       '@rn-dev-inspector/metro-plugin':
         specifier: workspace:*
         version: link:../metro-plugin
+      '@rn-dev-inspector/rn-compat':
+        specifier: workspace:*
+        version: link:../rn-compat
       react:
         specifier: '>=17.0.0'
         version: 18.3.1
@@ -122,6 +125,12 @@ importers:
       '@types/react-native':
         specifier: ^0.72.0
         version: 0.72.8(react-native@0.73.11)
+
+  packages/rn-compat:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.25
 
 packages:
 
