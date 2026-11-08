@@ -69,6 +69,9 @@ function buildEditorQueryString(codeInfo: CodeInfo, editor?: string): string {
     ['column', codeInfo.columnNumber],
     ['editor', editor],
   ];
+  const filledEntries = entries.filter(
+    ([, value]) => value !== undefined && value !== null && value !== '',
+  );
 
   // Capability detection must be behavioral: RN 0.72's URL polyfill
   // (Libraries/Blob/URL.js) "has" set() on its prototype, but calling it
@@ -78,10 +81,8 @@ function buildEditorQueryString(codeInfo: CodeInfo, editor?: string): string {
   if (typeof NativeParams === 'function') {
     try {
       const params = new NativeParams();
-      for (const [key, value] of entries) {
-        if (value !== undefined && value !== null && value !== '') {
-          params.set(key, String(value));
-        }
+      for (const [key, value] of filledEntries) {
+        params.set(key, String(value));
       }
       const qs = params.toString();
       if (typeof qs === 'string') return qs;
@@ -90,13 +91,10 @@ function buildEditorQueryString(codeInfo: CodeInfo, editor?: string): string {
     }
   }
 
-  // Fallback: manual concatenation (encodeURIComponent, skip empty values)
-  const parts: string[] = [];
-  for (const [key, value] of entries) {
-    if (value !== undefined && value !== null && value !== '') {
-      parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
-    }
-  }
+  // Fallback: manual concatenation (encodeURIComponent)
+  const parts: string[] = filledEntries.map(
+    ([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`,
+  );
   return parts.join('&');
 }
 
