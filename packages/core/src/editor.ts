@@ -7,7 +7,7 @@
  * - /__open-stack-frame-in-editor (legacy)
  */
 
-import {Platform, Linking} from 'react-native';
+import {Platform, Linking, NativeModules, TurboModuleRegistry} from 'react-native';
 import type {CodeInfo} from './fiber';
 
 export interface LaunchEditorOptions {
@@ -20,9 +20,35 @@ export interface LaunchEditorOptions {
 }
 
 /**
+ * Derive the dev server origin from the URL the app actually loaded its
+ * bundle from (NativeModules.SourceCode.scriptURL). This makes "Open in
+ * editor" work out of the box on real devices over LAN, emulators and
+ * adb-reverse setups alike, without hardcoding devServerUrl.
+ */
+function getScriptUrlOrigin(): string | null {
+  try {
+    // SourceCode is a TurboModule on newer RN (under bridgeless, legacy
+    // NativeModules still returns an interop proxy). scriptURL lives in
+    // getConstants() rather than as a direct module property (the legacy
+    // bridge flattens constants, bridgeless does not) — try both paths.
+    const mod: any = NativeModules?.SourceCode ?? (TurboModuleRegistry as any)?.get?.('SourceCode');
+    const scriptURL: string | undefined = mod?.scriptURL ?? mod?.getConstants?.()?.scriptURL;
+    if (!scriptURL) return null;
+    const match = scriptURL.match(/^https?:\/\/[^/?#]+/);
+    return match ? match[0] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Default dev server URL based on platform
  */
 function getDefaultDevServerUrl(): string {
+  const origin = getScriptUrlOrigin();
+  if (origin) {
+    return origin;
+  }
   if (Platform.OS === 'android') {
     // Android emulator uses 10.0.2.2 for localhost
     return 'http://10.0.2.2:8081';
@@ -35,23 +61,43 @@ function getDefaultDevServerUrl(): string {
  * Build query string for editor endpoint
  */
 function buildEditorQueryString(codeInfo: CodeInfo, editor?: string): string {
-  const params = new URLSearchParams();
-
   // Use absolutePath if available, otherwise relativePath
   const file = codeInfo.absolutePath || codeInfo.relativePath;
-  params.set('file', file);
+  const entries: Array<[string, string | number | undefined]> = [
+    ['file', file],
+    ['line', codeInfo.lineNumber],
+    ['column', codeInfo.columnNumber],
+    ['editor', editor],
+  ];
 
-  if (codeInfo.lineNumber) {
-    params.set('line', String(codeInfo.lineNumber));
-  }
-  if (codeInfo.columnNumber) {
-    params.set('column', String(codeInfo.columnNumber));
-  }
-  if (editor) {
-    params.set('editor', editor);
+  // Capability detection must be behavioral: RN 0.72's URL polyfill
+  // (Libraries/Blob/URL.js) "has" set() on its prototype, but calling it
+  // throws "URLSearchParams.set is not implemented" — a typeof check alone
+  // would be a false positive.
+  const NativeParams = (globalThis as any).URLSearchParams;
+  if (typeof NativeParams === 'function') {
+    try {
+      const params = new NativeParams();
+      for (const [key, value] of entries) {
+        if (value !== undefined && value !== null && value !== '') {
+          params.set(key, String(value));
+        }
+      }
+      const qs = params.toString();
+      if (typeof qs === 'string') return qs;
+    } catch {
+      // Probe failed, fall through to the manual fallback
+    }
   }
 
-  return params.toString();
+  // Fallback: manual concatenation (encodeURIComponent, skip empty values)
+  const parts: string[] = [];
+  for (const [key, value] of entries) {
+    if (value !== undefined && value !== null && value !== '') {
+      parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+    }
+  }
+  return parts.join('&');
 }
 
 /**
