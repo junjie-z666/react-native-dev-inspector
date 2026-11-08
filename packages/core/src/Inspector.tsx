@@ -24,6 +24,8 @@ import {
   Dimensions,
   findNodeHandle,
   SafeAreaView,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import {
   type Fiber,
@@ -134,6 +136,14 @@ export interface InspectorProps {
   editor?: string;
   devServerUrl?: string;
   addToDevMenu?: boolean;
+  /**
+   * Which item gets auto-selected when the user taps an element.
+   * - `'business'` (default): select the direct parent of the tapped element
+   *   (second-to-last in the hierarchy), which is usually the component the
+   *   user actually wants; falls back to the deepest item with source info.
+   * - `'deepest'`: always select the deepest item with source info (legacy).
+   */
+  selectionMode?: 'business' | 'deepest';
 }
 
 interface InspectorContextValue {
@@ -889,7 +899,9 @@ const InspectorPanel: React.FC<{
   onClose: () => void;
   panelPosition: 'top' | 'bottom';
   frame: { x: number; y: number; width: number; height: number } | null;
-}> = ({ hierarchy, selectedIndex, onSelectIndex, onOpenEditor, onClose, panelPosition, frame }) => {
+  /** Reports the panel's real on-screen bounds so touch interception can cede exactly the panel area */
+  onPanelLayout?: (y: number, height: number) => void;
+}> = ({ hierarchy, selectedIndex, onSelectIndex, onOpenEditor, onClose, panelPosition, frame, onPanelLayout }) => {
   const selectedItem = hierarchy[selectedIndex];
   const scrollViewRef = React.useRef<ScrollView>(null);
 
@@ -908,7 +920,10 @@ const InspectorPanel: React.FC<{
   }, [selectedIndex, hierarchy.length]);
 
   return (
-    <SafeAreaView style={[styles.panel, panelPosition === 'top' ? styles.panelTop : styles.panelBottom]}>
+    <SafeAreaView
+      style={[styles.panel, panelPosition === 'top' ? styles.panelTop : styles.panelBottom]}
+      onLayout={(event) => onPanelLayout?.(event.nativeEvent.layout.y, event.nativeEvent.layout.height)}
+    >
       <View style={styles.panelContent}>
         {/* Hierarchy breadcrumb */}
         <ScrollView
@@ -1013,6 +1028,7 @@ export const Inspector: React.FC<InspectorProps> = ({
   editor,
   devServerUrl,
   addToDevMenu = true,
+  selectionMode = 'business',
 }) => {
   const [isInspecting, setIsInspecting] = useState(false);
   const [selectedElement, setSelectedElement] = useState<SelectedElement>({
@@ -1023,6 +1039,18 @@ export const Inspector: React.FC<InspectorProps> = ({
     closestInstance: null,
   });
   const [panelPosition, setPanelPosition] = useState<'top' | 'bottom'>('bottom');
+  // Real on-screen bounds of the InspectorPanel, reported via onPanelLayout.
+  // Touch interception cedes exactly this area to the panel instead of a
+  // hard-coded band, so components next to / above the panel stay tappable.
+  const [panelBounds, setPanelBounds] = useState<{ top: number; bottom: number } | null>(null);
+
+  const handlePanelLayout = useCallback((y: number, height: number) => {
+    setPanelBounds({ top: y, bottom: y + height });
+  }, []);
+
+  const isInPanelArea = useCallback((pageY: number) => {
+    return !!panelBounds && pageY >= panelBounds.top && pageY <= panelBounds.bottom;
+  }, [panelBounds]);
 
   const contentViewRef = useRef<View | null>(null);
   const { height: screenHeight } = Dimensions.get('window');
@@ -1090,6 +1118,17 @@ export const Inspector: React.FC<InspectorProps> = ({
           }
         }
 
+        // selectionMode 'business' (default): select the direct parent of the
+        // tapped element (second-to-last) — usually the component the user
+        // actually wants. Falls back to the deepest codeInfo item above when
+        // the chain has a single entry or the parent has no source info.
+        if (selectionMode !== 'deepest') {
+          const parentIndex = hierarchy.length - 2;
+          if (parentIndex >= 0 && hierarchy[parentIndex].codeInfo) {
+            bestIndex = parentIndex;
+          }
+        }
+
         // Determine panel position based on touch location
         const newPanelPosition = y < screenHeight / 2 ? 'bottom' : 'top';
         setPanelPosition(newPanelPosition);
@@ -1120,7 +1159,7 @@ export const Inspector: React.FC<InspectorProps> = ({
         return true;
       }
     );
-  }, [screenHeight, onElementSelected]);
+  }, [screenHeight, onElementSelected, selectionMode]);
 
   const handleTouchStart = useCallback((event: any) => {
     const { pageX, pageY } = event.nativeEvent;
@@ -1175,7 +1214,20 @@ export const Inspector: React.FC<InspectorProps> = ({
 
   return (
     <InspectorContext.Provider value={contextValue}>
-      <View style={styles.container}>
+      <View
+        style={styles.container}
+        onStartShouldSetResponderCapture={(event) => {
+          if (!isInspecting) return false;
+          // Capture-phase interception: on RN 0.86+ Fabric hit-testing
+          // dispatches the touch straight to the deepest content view, so
+          // the touchLayer sibling would never see it. Intercepting on the
+          // container (an ancestor of all content) always wins. The panel
+          // area is ceded so its own controls stay responsive.
+          const { pageY } = event.nativeEvent;
+          return !isInPanelArea(pageY);
+        }}
+        onResponderGrant={handleTouchStart}
+      >
         <FiberCapture onViewRefCapture={handleViewRefCapture}>
           {children}
         </FiberCapture>
@@ -1185,7 +1237,11 @@ export const Inspector: React.FC<InspectorProps> = ({
             {/* Touch capture layer */}
             <View
               style={styles.touchLayer}
-              onStartShouldSetResponder={() => true}
+              onStartShouldSetResponder={(event) => {
+                // Cede exactly the panel's real area to the panel
+                const { pageY } = event.nativeEvent;
+                return !isInPanelArea(pageY);
+              }}
               onResponderGrant={handleTouchStart}
               onResponderMove={handleTouchStart}
             />
@@ -1214,6 +1270,7 @@ export const Inspector: React.FC<InspectorProps> = ({
                 onClose={disableInspector}
                 panelPosition={panelPosition}
                 frame={selectedElement.frame}
+                onPanelLayout={handlePanelLayout}
               />
             )}
           </>
@@ -1272,7 +1329,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   panelTop: {
-    top: 0,
+    // Keep the top panel below the Android status bar (iOS SafeAreaView already handles it)
+    top: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0,
   },
   panelBottom: {
     bottom: 0,
