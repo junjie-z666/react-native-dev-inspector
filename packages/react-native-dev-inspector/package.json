@@ -1,6 +1,6 @@
 {
   "name": "@azsxdc12356/react-native-dev-inspector",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Click on React Native components to jump to source code in your IDE",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -19,13 +19,14 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "shims"
   ],
   "scripts": {
-    "build": "tsup",
-    "clean": "rm -rf dist",
+    "build": "tsup && node -e \"require('fs').cpSync('../rn-compat/shims', 'shims', { recursive: true })\"",
+    "clean": "rm -rf dist shims",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "tsup"
+    "prepublishOnly": "pnpm build"
   },
   "keywords": [
     "react-native",

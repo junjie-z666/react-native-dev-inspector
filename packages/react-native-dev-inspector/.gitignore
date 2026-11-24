@@ -1,0 +1,2 @@
+# Copied from ../rn-compat/shims at build time (see package.json build script)
+shims/

@@ -90,6 +90,3 @@ export default function inspectorBabelPlugin(
     },
   };
 }
-
-// CommonJS export for babel
-module.exports = inspectorBabelPlugin;
